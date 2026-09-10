@@ -35,6 +35,11 @@ export default function Cart() {
               <Text className="text-[15px] font-semibold text-ink">
                 {line.name}
               </Text>
+              {line.note && (
+                <Text className="mt-0.5 text-[12px] italic text-gray-400">
+                  Note: {line.note}
+                </Text>
+              )}
               <Text className="mt-0.5 text-[13px] text-gray-500">
                 ৳{line.price} each
               </Text>

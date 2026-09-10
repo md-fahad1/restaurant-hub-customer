@@ -3,6 +3,7 @@ import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import { useEffect, useState } from "react";
 import { Linking, Text, TouchableOpacity, View } from "react-native";
+import "react-native-reanimated";
 import { SafeAreaProvider } from "react-native-safe-area-context";
 import { APP_VERSION, LATEST_VERSION_URL } from "../config";
 import { CartProvider } from "../context/CartContext";

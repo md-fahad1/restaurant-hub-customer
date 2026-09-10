@@ -1,7 +1,8 @@
 import { useMutation } from "@apollo/client/react";
 import { Ionicons } from "@expo/vector-icons";
+import * as Haptics from "expo-haptics";
 import { useRouter } from "expo-router";
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
@@ -17,6 +18,11 @@ import {
   CREATE_GUEST_ORDER_MUTATION,
   CreateGuestOrderData,
 } from "../lib/graphql";
+import {
+  addOrderToHistory,
+  getGuestInfo,
+  saveGuestInfo,
+} from "../lib/orderHistory";
 
 export default function Checkout() {
   const router = useRouter();
@@ -37,6 +43,17 @@ export default function Checkout() {
     CREATE_GUEST_ORDER_MUTATION,
   );
   const needsAddress = orderType === "DELIVERY";
+
+  // আগে কখনো অর্ডার করে থাকলে সেই নাম/ফোন/ঠিকানা auto-fill করে দিই
+  useEffect(() => {
+    getGuestInfo().then((info) => {
+      if (info) {
+        setGuestName(info.guestName);
+        setGuestPhone(info.guestPhone);
+        if (info.deliveryAddress) setDeliveryAddress(info.deliveryAddress);
+      }
+    });
+  }, []);
 
   async function handleSubmit() {
     if (!guestName.trim() || !guestPhone.trim()) {
@@ -68,13 +85,35 @@ export default function Checkout() {
       });
 
       const orderNumber = data?.createGuestOrder?.orderNumber;
+
+      // পরের বার auto-fill করার জন্য guest info সেভ রাখি
+      await saveGuestInfo({
+        guestName,
+        guestPhone,
+        deliveryAddress: needsAddress ? deliveryAddress : undefined,
+      });
+
+      // "My Orders"-এ দেখানোর জন্য history তে যোগ করি
+      if (orderNumber) {
+        await addOrderToHistory({
+          orderNumber,
+          guestPhone,
+          restaurantSlug: restaurantSlug ?? "",
+          restaurantName: restaurantSlug ?? "",
+          total: data?.createGuestOrder?.total ?? total,
+          placedAt: new Date().toISOString(),
+        });
+      }
+
       const slugForTracking = restaurantSlug ?? "";
       clearCart();
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       router.replace({
         pathname: "/order-status",
         params: { orderNumber, guestPhone, restaurantSlug: slugForTracking },
       });
     } catch (err) {
+      Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
       Alert.alert(
         "Order failed",
         err instanceof Error ? err.message : "Please try again.",

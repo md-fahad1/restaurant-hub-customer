@@ -42,6 +42,15 @@ export default function Landing() {
             Scan QR code
           </Text>
         </TouchableOpacity>
+        <TouchableOpacity
+          className="mb-3 flex-row items-center justify-center gap-2 py-2"
+          onPress={() => router.push("/orders" as any)}
+        >
+          <Ionicons name="receipt-outline" size={16} color="#6b7280" />
+          <Text className="text-[13px] font-medium text-gray-500">
+            View my past orders
+          </Text>
+        </TouchableOpacity>
 
         <Text className="mb-3 text-[13px] text-gray-400">
           or enter the restaurant code manually
