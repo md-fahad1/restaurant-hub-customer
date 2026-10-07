@@ -21,4 +21,4 @@ jobs:
       - run: npm ci
 
       - name: Publish OTA update
-        run: npx --yes eas-cli@latest update --channel preview --message "${{ github.event.head_commit.message }}" --non-interactive
+        run: npx --yes eas-cli@latest update --channel preview --platform android --message "${{ github.event.head_commit.message }}" --non-interactive
