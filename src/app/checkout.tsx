@@ -6,6 +6,8 @@ import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
   Alert,
+  KeyboardAvoidingView,
+  Platform,
   ScrollView,
   Text,
   TextInput,
@@ -26,6 +28,14 @@ import {
   getGuestInfo,
   saveGuestInfo,
 } from "../lib/orderHistory";
+
+// Bangladeshi mobile number: 01XXXXXXXXX (+88 / 88 prefix thakleo cholbe).
+// Valid hole 11 digit er local format ferot dei, nahole null.
+function normalizePhone(raw: string): string | null {
+  const cleaned = raw.replace(/[\s\-()]/g, "");
+  const match = cleaned.match(/^(?:\+?88)?(01[3-9]\d{8})$/);
+  return match ? match[1] : null;
+}
 
 export default function Checkout() {
   const router = useRouter();
@@ -48,6 +58,7 @@ export default function Checkout() {
   const restaurantName =
     menuData?.publicMenu.restaurant.name ?? restaurantSlug ?? "";
   const currency = menuData?.publicMenu.restaurant.currency;
+  const cur = currency ?? "৳";
   const tableNumber = menuData?.publicMenu.table?.tableNumber ?? null;
 
   const [createOrder, { loading }] = useMutation<CreateGuestOrderData>(
@@ -74,8 +85,19 @@ export default function Checkout() {
       );
       return;
     }
-    if (!guestName.trim() || !guestPhone.trim()) {
-      Alert.alert("Missing info", "Please enter your name and phone number.");
+
+    const name = guestName.trim();
+    const phone = normalizePhone(guestPhone);
+
+    if (!name) {
+      Alert.alert("Missing info", "Please enter your name.");
+      return;
+    }
+    if (!phone) {
+      Alert.alert(
+        "Invalid phone number",
+        "Please enter a valid mobile number, e.g. 01712345678.",
+      );
       return;
     }
     if (needsAddress && !deliveryAddress.trim()) {
@@ -90,9 +112,9 @@ export default function Checkout() {
             restaurantSlug: restaurantSlug ?? "",
             tableId: tableId ?? undefined,
             orderType,
-            guestName,
-            guestPhone,
-            deliveryAddress: needsAddress ? deliveryAddress : undefined,
+            guestName: name,
+            guestPhone: phone,
+            deliveryAddress: needsAddress ? deliveryAddress.trim() : undefined,
             items: items.map((l) => ({
               menuItemId: l.menuItemId,
               quantity: l.quantity,
@@ -106,16 +128,16 @@ export default function Checkout() {
 
       // পরের বার auto-fill করার জন্য guest info সেভ রাখি
       await saveGuestInfo({
-        guestName,
-        guestPhone,
-        deliveryAddress: needsAddress ? deliveryAddress : undefined,
+        guestName: name,
+        guestPhone: phone,
+        deliveryAddress: needsAddress ? deliveryAddress.trim() : undefined,
       });
 
       // "My Orders"-এ দেখানোর জন্য history তে যোগ করি
       if (orderNumber) {
         await addOrderToHistory({
           orderNumber,
-          guestPhone,
+          guestPhone: phone,
           restaurantSlug: restaurantSlug ?? "",
           restaurantName,
           total: data?.createGuestOrder?.total ?? total,
@@ -123,7 +145,7 @@ export default function Checkout() {
           currency,
           orderType,
           tableNumber,
-          deliveryAddress: needsAddress ? deliveryAddress : undefined,
+          deliveryAddress: needsAddress ? deliveryAddress.trim() : undefined,
           items: items.map((l) => ({
             menuItemId: l.menuItemId,
             name: l.name,
@@ -140,7 +162,11 @@ export default function Checkout() {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Success);
       router.replace({
         pathname: "/order-status",
-        params: { orderNumber, guestPhone, restaurantSlug: slugForTracking },
+        params: {
+          orderNumber,
+          guestPhone: phone,
+          restaurantSlug: slugForTracking,
+        },
       });
     } catch (err) {
       Haptics.notificationAsync(Haptics.NotificationFeedbackType.Error);
@@ -154,6 +180,7 @@ export default function Checkout() {
   return (
     <SafeAreaView className="flex-1 bg-white" edges={["bottom"]}>
       <Stack.Screen options={{ title: "Checkout" }} />
+
       <KeyboardAvoidingView
         className="flex-1"
         behavior="padding"
@@ -223,6 +250,7 @@ export default function Checkout() {
             placeholder="01XXXXXXXXX"
             placeholderTextColor="#9ca3af"
             keyboardType="phone-pad"
+            maxLength={15}
           />
 
           {needsAddress && (
@@ -264,13 +292,13 @@ export default function Checkout() {
                 {items.length} {items.length === 1 ? "item" : "items"}
               </Text>
               <Text className="text-[14px] font-semibold text-ink">
-                ৳{total}
+                {cur} {total}
               </Text>
             </View>
             <View className="flex-row justify-between border-t border-gray-200 pt-3">
               <Text className="text-base font-extrabold text-ink">Total</Text>
               <Text className="text-lg font-extrabold text-brand">
-                ৳{total}
+                {cur} {total}
               </Text>
             </View>
           </View>
@@ -294,7 +322,7 @@ export default function Checkout() {
               <ActivityIndicator color="white" />
             ) : (
               <Text className="text-[15px] font-bold text-white">
-                Place order · ৳{total}
+                Place order · {cur} {total}
               </Text>
             )}
           </TouchableOpacity>

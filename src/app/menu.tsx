@@ -1,6 +1,7 @@
 import { ErrorState } from "@/components/ErrorState";
 import { OfflineBanner } from "@/components/OfflineBanner";
 import { ServerWakingNotice } from "@/components/ServerWakingNotice";
+import { UpdateBanner } from "@/components/UpdateBanner";
 import { Ionicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
 import { Stack, useRouter } from "expo-router";
@@ -30,8 +31,8 @@ import { PublicCategory, PublicMenuItem } from "../lib/graphql";
 
 export default function Menu() {
   const router = useRouter();
-  const { leaveRestaurant } = useCart();
   const {
+    leaveRestaurant,
     restaurantSlug,
     tableId,
     orderType,
@@ -53,9 +54,12 @@ export default function Menu() {
   );
   const slowLoading = useSlowLoading(loading);
 
+  // Ekই item alada note diye alada line hole-o total quantity dekhai
   const qtyById = useMemo(() => {
     const map: Record<string, number> = {};
-    items.forEach((l) => (map[l.menuItemId] = l.quantity));
+    items.forEach(
+      (l) => (map[l.menuItemId] = (map[l.menuItemId] ?? 0) + l.quantity),
+    );
     return map;
   }, [items]);
 
@@ -128,6 +132,15 @@ export default function Menu() {
           message="Please check your internet connection and try again."
           onRetry={() => refetch()}
         />
+        {/* Menu load na hole-o onno restaurant e jaoar rasta thakbe */}
+        <TouchableOpacity
+          onPress={handleChangeRestaurant}
+          className="items-center pb-6"
+        >
+          <Text className="text-[13px] font-semibold text-gray-500 underline">
+            Change restaurant
+          </Text>
+        </TouchableOpacity>
       </SafeAreaView>
     );
   }
@@ -140,7 +153,8 @@ export default function Menu() {
   function handleChangeRestaurant() {
     const go = () => {
       leaveRestaurant();
-      router.replace("/");
+      // change=1: landing screen e auto-open skip korbe
+      router.replace({ pathname: "/", params: { change: "1" } });
     };
     if (itemCount > 0) {
       Alert.alert("Change restaurant?", "Your current cart will be cleared.", [
@@ -267,6 +281,7 @@ export default function Menu() {
       <Stack.Screen options={{ headerShown: false }} />
 
       <KeyboardAvoidingView className="flex-1" behavior="padding">
+        <UpdateBanner />
         <OfflineBanner
           online={online}
           stale={isStale}
@@ -426,6 +441,7 @@ export default function Menu() {
             keyExtractor={(c) => c.id}
             ListHeaderComponent={listHeader}
             showsVerticalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
             contentContainerStyle={{ paddingBottom: itemCount > 0 ? 110 : 24 }}
             onScrollToIndexFailed={() => {}}
             onViewableItemsChanged={({ viewableItems }) => {

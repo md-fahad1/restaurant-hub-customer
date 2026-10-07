@@ -57,6 +57,7 @@ export function ItemDetailModal({ item, currency, onClose, onAdd }: Props) {
             <ScrollView
               className="max-h-[70%]"
               contentContainerStyle={{ padding: 20 }}
+              keyboardShouldPersistTaps="handled"
             >
               {item.image ? (
                 <Image

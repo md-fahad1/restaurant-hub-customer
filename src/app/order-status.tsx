@@ -451,7 +451,7 @@ export default function OrderStatus() {
           <View className="mt-2 flex-row justify-between border-t border-gray-200 pt-3">
             <Text className="text-base font-extrabold text-ink">Total</Text>
             <Text className="text-lg font-extrabold text-brand">
-              ৳{order.total}
+              {entry?.currency ?? "৳"} {order.total}
             </Text>
           </View>
         </View>

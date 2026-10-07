@@ -1,24 +1,37 @@
 import { Ionicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
-import { Stack, useRouter } from "expo-router";
-import { useState } from "react";
+import { Stack, useLocalSearchParams, useRouter } from "expo-router";
+import { useEffect, useState } from "react";
 import {
   KeyboardAvoidingView,
   StyleSheet,
   Text,
   TextInput,
   TouchableOpacity,
-  View
+  View,
 } from "react-native";
 import { useSafeAreaInsets } from "react-native-safe-area-context";
+import { UpdateBanner } from "../components/UpdateBanner";
 import { useCart } from "../context/CartContext";
 const HERO_IMAGE = require("../../assets/images/hero.jpg");
 
 export default function Landing() {
   const router = useRouter();
   const insets = useSafeAreaInsets();
-  const { setRestaurant } = useCart();
+  const { setRestaurant, restaurantSlug, hydrated } = useCart();
+  // "Change restaurant" theke ashle change=1 thake, tokhon auto-open hobe na
+  const { change } = useLocalSearchParams<{ change?: string }>();
   const [manualCode, setManualCode] = useState("");
+  const [ready, setReady] = useState(false);
+
+  // App khulle age restaurant select kora thakle shorashori menu te jai
+  useEffect(() => {
+    if (!hydrated) return;
+    if (restaurantSlug && !change) router.replace("/menu");
+    else setReady(true);
+    // shudhu ekbar chalabo, nahole manual code dile abar menu te lafiye jabe
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [hydrated]);
 
   function handleManualEntry() {
     const slug = manualCode.trim().toLowerCase().replace(/\s+/g, "-");
@@ -27,9 +40,19 @@ export default function Landing() {
     router.push("/order-type");
   }
 
+  if (!ready) return <View className="flex-1 bg-ink" />;
+
   return (
     <KeyboardAvoidingView className="flex-1 bg-ink" behavior="padding">
       <Stack.Screen options={{ headerShown: false, statusBarStyle: "light" }} />
+
+      {/* Update banner (shudhu ei page e) */}
+      <View
+        className="absolute left-0 right-0 top-0 z-10"
+        style={{ paddingTop: insets.top }}
+      >
+        <UpdateBanner />
+      </View>
 
       {/* Hero */}
       <View className="flex-1 justify-end overflow-hidden px-6 pb-10">

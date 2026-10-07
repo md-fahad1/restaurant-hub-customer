@@ -2,11 +2,16 @@ import { Ionicons } from "@expo/vector-icons";
 import { useRouter } from "expo-router";
 import { FlatList, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { useCart } from "../context/CartContext";
+import { lineKey, useCart } from "../context/CartContext";
+import { usePublicMenu } from "../hooks/use-public-menu";
 
 export default function Cart() {
   const router = useRouter();
-  const { items, updateQuantity, total } = useCart();
+  const { items, updateQuantity, total, restaurantSlug, tableId } = useCart();
+
+  // Restaurant er currency (cache kora menu theke)
+  const { data: menuData } = usePublicMenu(restaurantSlug, tableId);
+  const currency = menuData?.publicMenu.restaurant.currency ?? "৳";
 
   if (items.length === 0) {
     return (
@@ -27,7 +32,7 @@ export default function Cart() {
     <SafeAreaView className="flex-1 bg-white" edges={["bottom"]}>
       <FlatList
         data={items}
-        keyExtractor={(l) => l.menuItemId}
+        keyExtractor={(l) => lineKey(l)}
         contentContainerStyle={{ padding: 16 }}
         renderItem={({ item: line }) => (
           <View className="mb-3 flex-row items-center rounded-2xl border border-gray-100 p-3">
@@ -41,15 +46,13 @@ export default function Cart() {
                 </Text>
               )}
               <Text className="mt-0.5 text-[13px] text-gray-500">
-                ৳{line.price} each
+                {currency} {line.price} each
               </Text>
             </View>
             <View className="flex-row items-center gap-3">
               <TouchableOpacity
                 className="h-8 w-8 items-center justify-center rounded-full bg-gray-100 active:opacity-70"
-                onPress={() =>
-                  updateQuantity(line.menuItemId, line.quantity - 1)
-                }
+                onPress={() => updateQuantity(lineKey(line), line.quantity - 1)}
               >
                 <Ionicons name="remove" size={16} color="#1a1a1a" />
               </TouchableOpacity>
@@ -58,9 +61,7 @@ export default function Cart() {
               </Text>
               <TouchableOpacity
                 className="h-8 w-8 items-center justify-center rounded-full bg-ink active:opacity-80"
-                onPress={() =>
-                  updateQuantity(line.menuItemId, line.quantity + 1)
-                }
+                onPress={() => updateQuantity(lineKey(line), line.quantity + 1)}
               >
                 <Ionicons name="add" size={16} color="white" />
               </TouchableOpacity>
@@ -72,7 +73,9 @@ export default function Cart() {
       <View className="border-t border-gray-100 p-4">
         <View className="mb-3 flex-row justify-between">
           <Text className="text-base font-semibold text-ink">Total</Text>
-          <Text className="text-lg font-extrabold text-brand">৳{total}</Text>
+          <Text className="text-lg font-extrabold text-brand">
+            {currency} {total}
+          </Text>
         </View>
         <TouchableOpacity
           className="items-center rounded-2xl bg-brand py-4 active:opacity-90"
