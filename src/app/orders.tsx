@@ -1,267 +1,259 @@
-import { useQuery } from "@apollo/client/react";
 import { Ionicons } from "@expo/vector-icons";
-import * as Notifications from "expo-notifications";
-import { useLocalSearchParams } from "expo-router";
-import { useEffect, useRef } from "react";
 import {
-    ActivityIndicator,
-    Linking,
-    ScrollView,
-    Text,
-    TouchableOpacity,
-    View,
-} from "react-native";
+  Stack,
+  useFocusEffect,
+  useLocalSearchParams,
+  useRouter,
+} from "expo-router";
+import { useCallback, useMemo, useState } from "react";
+import { Alert, FlatList, Text, TouchableOpacity, View } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
-import { TRACK_ORDER_QUERY, TrackGuestOrderData } from "../lib/graphql";
+import { ReceiptModal } from "../components/ReceiptModal";
+import { cardShadow } from "../constants/ui";
+import { useCart } from "../context/CartContext";
+import { getOrderHistory, OrderHistoryEntry } from "../lib/orderHistory";
 
-Notifications.setNotificationHandler({
-  handleNotification: async () => ({
-    shouldShowAlert: true,
-    shouldPlaySound: true,
-    shouldSetBadge: false,
-    shouldShowBanner: true,
-    shouldShowList: true,
-  }),
-});
-
-const STATUS_LABELS: Record<string, string> = {
-  CONFIRMED: "Your order has been confirmed!",
-  PREPARING: "The kitchen is preparing your order.",
-  READY: "Your order is ready!",
-  COMPLETED: "Order completed. Enjoy your meal!",
-  ASSIGNED: "A rider has been assigned to your order.",
-  PICKED_UP: "Your order has been picked up.",
-  OUT_FOR_DELIVERY: "Your order is on the way!",
-  DELIVERED: "Your order has been delivered!",
-};
-
-// রান্নাঘরের status (dine-in / takeaway অর্ডারের জন্য)
-const KITCHEN_STEPS = [
-  { key: "PENDING", label: "Order placed", icon: "receipt-outline" as const },
-  {
-    key: "CONFIRMED",
-    label: "Confirmed",
-    icon: "checkmark-circle-outline" as const,
-  },
-  { key: "PREPARING", label: "Preparing", icon: "flame-outline" as const },
-  { key: "READY", label: "Ready", icon: "fast-food-outline" as const },
-  { key: "COMPLETED", label: "Completed", icon: "happy-outline" as const },
-];
-
-// ডেলিভারির status (delivery অর্ডারের জন্য — backend DeliveryStatus enum-এর সাথে মিলিয়ে)
-const DELIVERY_STEPS = [
-  { key: "PENDING", label: "Order received", icon: "receipt-outline" as const },
-  { key: "ASSIGNED", label: "Rider assigned", icon: "person-outline" as const },
-  { key: "PICKED_UP", label: "Picked up", icon: "bag-check-outline" as const },
-  {
-    key: "OUT_FOR_DELIVERY",
-    label: "On the way",
-    icon: "bicycle-outline" as const,
-  },
-  { key: "DELIVERED", label: "Delivered", icon: "home-outline" as const },
-];
-
-type Step = {
-  key: string;
-  label: string;
-  icon: keyof typeof Ionicons.glyphMap;
-};
-
-function StepTimeline({
-  steps,
-  currentKey,
-}: {
-  steps: Step[];
-  currentKey: string;
-}) {
-  const currentIndex = steps.findIndex((s) => s.key === currentKey);
-
-  return (
-    <View className="mb-6">
-      {steps.map((step, i) => {
-        const active = i <= currentIndex;
-        const isLast = i === steps.length - 1;
-        return (
-          <View key={step.key} className="flex-row">
-            <View className="items-center">
-              <View
-                className={`h-9 w-9 items-center justify-center rounded-full ${active ? "bg-brand" : "bg-gray-100"}`}
-              >
-                <Ionicons
-                  name={step.icon}
-                  size={17}
-                  color={active ? "white" : "#9ca3af"}
-                />
-              </View>
-              {!isLast && (
-                <View
-                  className={`h-8 w-0.5 ${active ? "bg-brand" : "bg-gray-100"}`}
-                />
-              )}
-            </View>
-            <Text
-              className={`ml-3 pt-2 text-[15px] ${active ? "font-semibold text-ink" : "text-gray-400"}`}
-            >
-              {step.label}
-            </Text>
-          </View>
-        );
-      })}
-    </View>
-  );
+function prettyName(name: string) {
+  return name
+    .split("-")
+    .filter(Boolean)
+    .map((w) => w.charAt(0).toUpperCase() + w.slice(1))
+    .join(" ");
 }
 
-export default function OrderStatus() {
-  const { orderNumber, guestPhone, restaurantSlug } = useLocalSearchParams<{
-    orderNumber: string;
-    guestPhone: string;
-    restaurantSlug: string;
+function formatWhen(iso: string) {
+  const d = new Date(iso);
+  if (isNaN(d.getTime())) return "";
+  return `${d.toLocaleDateString([], { day: "numeric", month: "short", year: "numeric" })} · ${d.toLocaleTimeString([], { hour: "numeric", minute: "2-digit" })}`;
+}
+
+export default function Orders() {
+  const router = useRouter();
+  const { addItem, clearCart, setRestaurant, itemCount } = useCart();
+  const { restaurantSlug } = useLocalSearchParams<{
+    restaurantSlug?: string;
   }>();
+  const scoped = !!restaurantSlug;
 
-  const previousStatusRef = useRef<string | null>(null);
+  const [history, setHistory] = useState<OrderHistoryEntry[]>([]);
+  const [receiptFor, setReceiptFor] = useState<OrderHistoryEntry | null>(null);
 
-  const { data, loading, error } = useQuery<TrackGuestOrderData>(
-    TRACK_ORDER_QUERY,
-    {
-      variables: { restaurantSlug, orderNumber, guestPhone },
-      pollInterval: 5000,
-      skip: !restaurantSlug || !orderNumber || !guestPhone,
-    },
+  useFocusEffect(
+    useCallback(() => {
+      getOrderHistory().then(setHistory);
+    }, []),
   );
 
-  useEffect(() => {
-    Notifications.requestPermissionsAsync();
-  }, []);
+  const visibleOrders = useMemo(
+    () =>
+      scoped
+        ? history.filter((o) => o.restaurantSlug === restaurantSlug)
+        : history,
+    [history, scoped, restaurantSlug],
+  );
 
-  useEffect(() => {
-    const order = data?.trackGuestOrder;
-    if (!order) return;
+  const title = scoped ? "My Orders Here" : "My Orders";
+  const scopedName = scoped
+    ? prettyName(visibleOrders[0]?.restaurantName || restaurantSlug!)
+    : "";
 
-    const currentStatus = order.delivery ? order.delivery.status : order.status;
+  function reorder(entry: OrderHistoryEntry) {
+    const lines = entry.items ?? [];
+    if (lines.length === 0) return;
 
-    if (
-      previousStatusRef.current &&
-      previousStatusRef.current !== currentStatus
-    ) {
-      const message =
-        STATUS_LABELS[currentStatus] ?? `Order status: ${currentStatus}`;
-      Notifications.scheduleNotificationAsync({
-        content: {
-          title: `Order #${order.orderNumber}`,
-          body: message,
-        },
-        trigger: null, // সাথে সাথে দেখাবে
-      });
+    const run = () => {
+      clearCart();
+      setRestaurant(entry.restaurantSlug, null);
+      lines.forEach((l) =>
+        addItem(
+          {
+            menuItemId: l.menuItemId,
+            name: l.name,
+            price: l.price,
+            image: l.image,
+            note: l.note,
+          },
+          l.quantity,
+        ),
+      );
+      // Order type (dine-in / takeaway / delivery) abar bachte dei
+      router.push("/order-type");
+    };
+
+    if (itemCount > 0) {
+      Alert.alert(
+        "Replace your cart?",
+        "Your current cart will be replaced with this past order.",
+        [
+          { text: "Cancel", style: "cancel" },
+          { text: "Replace", style: "destructive", onPress: run },
+        ],
+      );
+    } else {
+      run();
     }
-    previousStatusRef.current = currentStatus;
-  }, [data]);
-
-  if (loading && !data) {
-    return (
-      <View className="flex-1 items-center justify-center bg-white">
-        <ActivityIndicator color="#ea580c" size="large" />
-      </View>
-    );
   }
 
-  if (error || !data) {
+  if (visibleOrders.length === 0) {
     return (
-      <View className="flex-1 items-center justify-center gap-2 bg-white p-6">
-        <Ionicons name="alert-circle-outline" size={40} color="#ef4444" />
-        <Text className="text-center text-gray-600">
-          Could not find this order.
+      <View className="flex-1 items-center justify-center bg-white p-6">
+        <Stack.Screen options={{ title }} />
+        <View className="mb-4 h-24 w-24 items-center justify-center rounded-full bg-cream">
+          <Ionicons name="receipt-outline" size={42} color="#ea580c" />
+        </View>
+        <Text className="text-xl font-extrabold text-ink">No orders yet</Text>
+        <Text className="mt-1 text-center text-[14px] text-gray-500">
+          {scoped
+            ? `You haven't ordered from ${scopedName} yet.`
+            : "Your past orders will show up here."}
         </Text>
+        <TouchableOpacity
+          className="mt-6 rounded-2xl bg-brand px-8 py-3.5"
+          onPress={() => (scoped ? router.back() : router.replace("/"))}
+        >
+          <Text className="font-bold text-white">
+            {scoped ? "Back to menu" : "Start ordering"}
+          </Text>
+        </TouchableOpacity>
       </View>
     );
   }
-
-  const order = data.trackGuestOrder;
-  const isDelivery = order.type === "DELIVERY" && order.delivery;
 
   return (
     <SafeAreaView className="flex-1 bg-white" edges={["bottom"]}>
-      <ScrollView className="flex-1 p-5">
-        <View className="mb-1 flex-row items-center justify-between">
-          <Text className="text-xl font-extrabold text-ink">
-            Order #{order.orderNumber}
+      <Stack.Screen options={{ title }} />
+
+      {scoped && (
+        <View className="mx-4 mt-3 flex-row items-center gap-2 rounded-2xl bg-cream px-4 py-3">
+          <Ionicons name="restaurant" size={16} color="#ea580c" />
+          <Text className="flex-1 text-[13px] font-semibold text-brand">
+            Showing orders from {scopedName}
           </Text>
-          <View className="rounded-full bg-cream px-3 py-1">
-            <Text className="text-xs font-semibold text-amber-800">
-              {order.type === "DINE_IN"
-                ? "Dine-in"
-                : order.type === "DELIVERY"
-                  ? "Delivery"
-                  : "Takeaway"}
-            </Text>
-          </View>
         </View>
-        <Text className="mb-6 text-[15px] text-gray-500">
-          Total: ৳{order.total}
-        </Text>
+      )}
 
-        {isDelivery ? (
-          <>
-            <StepTimeline
-              steps={DELIVERY_STEPS}
-              currentKey={order.delivery!.status}
-            />
+      <FlatList
+        data={visibleOrders}
+        keyExtractor={(o) => o.orderNumber}
+        contentContainerStyle={{ padding: 16 }}
+        showsVerticalScrollIndicator={false}
+        renderItem={({ item }) => {
+          const hasItems = !!item.items && item.items.length > 0;
+          const summary = item.items
+            ?.map((l) => `${l.quantity}× ${l.name}`)
+            .join(", ");
 
-            <View className="mb-5 rounded-2xl border border-gray-100 p-4">
-              <View className="mb-2 flex-row items-center gap-2">
-                <Ionicons name="location-outline" size={16} color="#6b7280" />
-                <Text className="flex-1 text-[13px] text-gray-600">
-                  {order.delivery!.deliveryAddress}
+          return (
+            <TouchableOpacity
+              activeOpacity={0.9}
+              className="mb-3 rounded-3xl bg-white p-4"
+              style={cardShadow}
+              onPress={() =>
+                router.push({
+                  pathname: "/order-status",
+                  params: {
+                    orderNumber: item.orderNumber,
+                    guestPhone: item.guestPhone,
+                    restaurantSlug: item.restaurantSlug,
+                  },
+                })
+              }
+            >
+              <View className="flex-row items-center gap-3">
+                <View className="h-12 w-12 items-center justify-center rounded-2xl bg-cream">
+                  <Ionicons name="restaurant" size={20} color="#ea580c" />
+                </View>
+
+                <View className="flex-1">
+                  <Text
+                    numberOfLines={1}
+                    className="text-[15px] font-bold text-ink"
+                  >
+                    {prettyName(item.restaurantName || item.restaurantSlug)}
+                  </Text>
+                  <Text className="mt-0.5 text-[12px] text-gray-400">
+                    Order #{item.orderNumber}
+                  </Text>
+                </View>
+
+                <Text className="text-[16px] font-extrabold text-brand">
+                  {item.currency ?? "৳"}
+                  {item.total}
                 </Text>
               </View>
 
-              {order.delivery!.partnerName ? (
-                <View className="mt-2 flex-row items-center justify-between border-t border-gray-100 pt-3">
-                  <View className="flex-row items-center gap-2">
-                    <View className="h-9 w-9 items-center justify-center rounded-full bg-cream">
-                      <Ionicons name="bicycle" size={18} color="#92400e" />
-                    </View>
-                    <View>
-                      <Text className="text-[14px] font-semibold text-ink">
-                        {order.delivery!.partnerName}
-                      </Text>
-                      <Text className="text-[12px] text-gray-500">
-                        Your delivery rider
-                      </Text>
-                    </View>
-                  </View>
-                  {order.delivery!.partnerPhone && (
+              {summary ? (
+                <Text
+                  numberOfLines={2}
+                  className="mt-3 text-[13px] leading-5 text-gray-600"
+                >
+                  {summary}
+                </Text>
+              ) : null}
+
+              <View className="mt-3 flex-row items-center justify-between border-t border-gray-100 pt-3">
+                <View className="flex-row items-center gap-1.5">
+                  <Ionicons name="time-outline" size={14} color="#9ca3af" />
+                  <Text className="text-[12px] text-gray-500">
+                    {formatWhen(item.placedAt)}
+                  </Text>
+                </View>
+
+                <View className="flex-row items-center gap-2">
+                  {hasItems && (
                     <TouchableOpacity
-                      className="h-10 w-10 items-center justify-center rounded-full bg-brand"
-                      onPress={() =>
-                        Linking.openURL(`tel:${order.delivery!.partnerPhone}`)
-                      }
+                      onPress={() => setReceiptFor(item)}
+                      className="flex-row items-center gap-1.5 rounded-full border border-brand px-3 py-2 active:opacity-80"
                     >
-                      <Ionicons name="call" size={16} color="white" />
+                      <Ionicons
+                        name="receipt-outline"
+                        size={14}
+                        color="#ea580c"
+                      />
+                      <Text className="text-[12px] font-bold text-brand">
+                        Receipt
+                      </Text>
+                    </TouchableOpacity>
+                  )}
+                  {hasItems && (
+                    <TouchableOpacity
+                      onPress={() => reorder(item)}
+                      className="flex-row items-center gap-1.5 rounded-full bg-brand px-3.5 py-2 active:opacity-90"
+                    >
+                      <Ionicons name="refresh" size={14} color="white" />
+                      <Text className="text-[12px] font-bold text-white">
+                        Order again
+                      </Text>
                     </TouchableOpacity>
                   )}
                 </View>
-              ) : (
-                <Text className="mt-2 text-[13px] text-gray-400">
-                  Waiting for a rider to be assigned…
-                </Text>
-              )}
-            </View>
-          </>
-        ) : (
-          <StepTimeline steps={KITCHEN_STEPS} currentKey={order.status} />
-        )}
+              </View>
+            </TouchableOpacity>
+          );
+        }}
+      />
 
-        <Text className="mb-2 font-semibold text-ink">Items</Text>
-        {order.items.map((item, i) => (
-          <View
-            key={i}
-            className="flex-row justify-between border-b border-gray-100 py-2"
-          >
-            <Text className="text-gray-700">{item.name}</Text>
-            <Text className="text-gray-500">× {item.quantity}</Text>
-          </View>
-        ))}
-      </ScrollView>
+      {/* Receipt (net chhara, phone er history theke) */}
+      {receiptFor && (
+        <ReceiptModal
+          visible
+          onClose={() => setReceiptFor(null)}
+          entry={receiptFor}
+          restaurantSlug={receiptFor.restaurantSlug}
+          order={{
+            orderNumber: receiptFor.orderNumber,
+            createdAt: receiptFor.placedAt,
+            type: receiptFor.orderType,
+            tableNumber: receiptFor.tableNumber,
+            total: receiptFor.total,
+            deliveryAddress: receiptFor.deliveryAddress ?? null,
+            items: (receiptFor.items ?? []).map((i) => ({
+              name: i.name,
+              quantity: i.quantity,
+            })),
+          }}
+        />
+      )}
     </SafeAreaView>
   );
 }

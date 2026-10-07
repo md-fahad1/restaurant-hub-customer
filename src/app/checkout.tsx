@@ -1,7 +1,7 @@
 import { useMutation } from "@apollo/client/react";
 import { Ionicons } from "@expo/vector-icons";
 import * as Haptics from "expo-haptics";
-import { useRouter } from "expo-router";
+import { Stack, useRouter } from "expo-router";
 import { useEffect, useState } from "react";
 import {
   ActivityIndicator,
@@ -13,7 +13,10 @@ import {
   View,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { cardShadow, ORDER_TYPES } from "../constants/ui";
 import { useCart } from "../context/CartContext";
+import { useIsOnline } from "../hooks/use-online";
+import { usePublicMenu } from "../hooks/use-public-menu";
 import {
   CREATE_GUEST_ORDER_MUTATION,
   CreateGuestOrderData,
@@ -38,6 +41,14 @@ export default function Checkout() {
   const [guestName, setGuestName] = useState("");
   const [guestPhone, setGuestPhone] = useState("");
   const [deliveryAddress, setDeliveryAddress] = useState("");
+  const online = useIsOnline();
+
+  // Restaurant naam, currency ar table number (cache/save kora menu theke)
+  const { data: menuData } = usePublicMenu(restaurantSlug, tableId);
+  const restaurantName =
+    menuData?.publicMenu.restaurant.name ?? restaurantSlug ?? "";
+  const currency = menuData?.publicMenu.restaurant.currency;
+  const tableNumber = menuData?.publicMenu.table?.tableNumber ?? null;
 
   const [createOrder, { loading }] = useMutation<CreateGuestOrderData>(
     CREATE_GUEST_ORDER_MUTATION,
@@ -56,6 +67,13 @@ export default function Checkout() {
   }, []);
 
   async function handleSubmit() {
+    if (!online) {
+      Alert.alert(
+        "You're offline",
+        "Connect to the internet to place your order.",
+      );
+      return;
+    }
     if (!guestName.trim() || !guestPhone.trim()) {
       Alert.alert("Missing info", "Please enter your name and phone number.");
       return;
@@ -99,9 +117,21 @@ export default function Checkout() {
           orderNumber,
           guestPhone,
           restaurantSlug: restaurantSlug ?? "",
-          restaurantName: restaurantSlug ?? "",
+          restaurantName,
           total: data?.createGuestOrder?.total ?? total,
           placedAt: new Date().toISOString(),
+          currency,
+          orderType,
+          tableNumber,
+          deliveryAddress: needsAddress ? deliveryAddress : undefined,
+          items: items.map((l) => ({
+            menuItemId: l.menuItemId,
+            name: l.name,
+            price: l.price,
+            quantity: l.quantity,
+            image: l.image,
+            note: l.note,
+          })),
         });
       }
 
@@ -123,77 +153,153 @@ export default function Checkout() {
 
   return (
     <SafeAreaView className="flex-1 bg-white" edges={["bottom"]}>
-      <ScrollView className="flex-1 p-4" keyboardShouldPersistTaps="handled">
-        <Text className="mb-4 text-lg font-bold text-ink">Your details</Text>
-
-        <Text className="mb-1.5 text-[13px] font-medium text-gray-600">
-          Full name
-        </Text>
-        <TextInput
-          className="mb-4 rounded-xl border border-gray-200 px-4 py-3 text-[15px]"
-          value={guestName}
-          onChangeText={setGuestName}
-          placeholder="Your name"
-          placeholderTextColor="#9ca3af"
-        />
-
-        <Text className="mb-1.5 text-[13px] font-medium text-gray-600">
-          Phone number
-        </Text>
-        <TextInput
-          className="mb-4 rounded-xl border border-gray-200 px-4 py-3 text-[15px]"
-          value={guestPhone}
-          onChangeText={setGuestPhone}
-          placeholder="01XXXXXXXXX"
-          placeholderTextColor="#9ca3af"
-          keyboardType="phone-pad"
-        />
-
-        {needsAddress && (
-          <>
-            <Text className="mb-1.5 text-[13px] font-medium text-gray-600">
-              Delivery address
-            </Text>
-            <TextInput
-              className="mb-4 rounded-xl border border-gray-200 px-4 py-3 text-[15px]"
-              value={deliveryAddress}
-              onChangeText={setDeliveryAddress}
-              placeholder="House, road, area"
-              placeholderTextColor="#9ca3af"
-              multiline
-              numberOfLines={3}
-            />
-          </>
-        )}
-
-        <View className="mt-2 flex-row items-center gap-2 rounded-xl bg-cream p-3.5">
-          <Ionicons name="cash-outline" size={18} color="#92400e" />
-          <Text className="text-[13px] font-medium text-amber-800">
-            Pay by cash on {needsAddress ? "delivery" : "pickup"}
-          </Text>
-        </View>
-
-        <View className="mt-5 flex-row justify-between border-t border-gray-100 pt-4">
-          <Text className="text-base font-semibold text-ink">Total</Text>
-          <Text className="text-lg font-extrabold text-brand">৳{total}</Text>
-        </View>
-      </ScrollView>
-
-      <View className="p-4">
-        <TouchableOpacity
-          className="items-center rounded-2xl bg-brand py-4 active:opacity-90 disabled:opacity-50"
-          onPress={handleSubmit}
-          disabled={loading}
+      <Stack.Screen options={{ title: "Checkout" }} />
+      <KeyboardAvoidingView
+        className="flex-1"
+        behavior="padding"
+        keyboardVerticalOffset={Platform.OS === "ios" ? 90 : 0}
+      >
+        <ScrollView
+          className="flex-1"
+          contentContainerStyle={{ padding: 16 }}
+          keyboardShouldPersistTaps="handled"
+          showsVerticalScrollIndicator={false}
         >
-          {loading ? (
-            <ActivityIndicator color="white" />
-          ) : (
-            <Text className="text-[15px] font-bold text-white">
-              Place order
-            </Text>
+          {/* Order type switcher (table QR hole lukano) */}
+          {!tableId && (
+            <>
+              <Text className="mb-2 text-[13px] font-semibold text-gray-500">
+                ORDER TYPE
+              </Text>
+              <View className="mb-5 flex-row gap-1.5 rounded-2xl bg-surface p-1.5">
+                {ORDER_TYPES.map((o) => {
+                  const active = o.type === orderType;
+                  return (
+                    <TouchableOpacity
+                      key={o.type}
+                      onPress={() => setOrderType(o.type)}
+                      className={`flex-1 items-center rounded-xl py-3 ${active ? "bg-white" : ""}`}
+                      style={active ? cardShadow : undefined}
+                    >
+                      <Ionicons
+                        name={o.icon}
+                        size={20}
+                        color={active ? "#ea580c" : "#9ca3af"}
+                      />
+                      <Text
+                        className={`mt-1 text-[12px] font-semibold ${active ? "text-ink" : "text-gray-400"}`}
+                      >
+                        {o.title}
+                      </Text>
+                    </TouchableOpacity>
+                  );
+                })}
+              </View>
+            </>
           )}
-        </TouchableOpacity>
-      </View>
+
+          <Text className="mb-3 text-lg font-extrabold text-ink">
+            Your details
+          </Text>
+
+          <Text className="mb-1.5 text-[13px] font-medium text-gray-500">
+            Full name
+          </Text>
+          <TextInput
+            className="mb-4 rounded-2xl bg-surface px-4 py-3.5 text-[15px] text-ink"
+            value={guestName}
+            onChangeText={setGuestName}
+            placeholder="Your name"
+            placeholderTextColor="#9ca3af"
+          />
+
+          <Text className="mb-1.5 text-[13px] font-medium text-gray-500">
+            Phone number
+          </Text>
+          <TextInput
+            className="mb-4 rounded-2xl bg-surface px-4 py-3.5 text-[15px] text-ink"
+            value={guestPhone}
+            onChangeText={setGuestPhone}
+            placeholder="01XXXXXXXXX"
+            placeholderTextColor="#9ca3af"
+            keyboardType="phone-pad"
+          />
+
+          {needsAddress && (
+            <>
+              <Text className="mb-1.5 text-[13px] font-medium text-gray-500">
+                Delivery address
+              </Text>
+              <TextInput
+                className="mb-4 min-h-[90px] rounded-2xl bg-surface px-4 py-3.5 text-[15px] text-ink"
+                value={deliveryAddress}
+                onChangeText={setDeliveryAddress}
+                placeholder="House, road, area"
+                placeholderTextColor="#9ca3af"
+                multiline
+                textAlignVertical="top"
+              />
+            </>
+          )}
+
+          {/* Payment */}
+          <View className="flex-row items-center gap-3 rounded-2xl bg-cream p-4">
+            <View className="h-10 w-10 items-center justify-center rounded-full bg-white">
+              <Ionicons name="cash-outline" size={20} color="#ea580c" />
+            </View>
+            <View className="flex-1">
+              <Text className="text-[14px] font-bold text-ink">
+                Cash payment
+              </Text>
+              <Text className="text-[12px] text-gray-500">
+                Pay on {needsAddress ? "delivery" : "pickup"}
+              </Text>
+            </View>
+          </View>
+
+          {/* Summary */}
+          <View className="mt-5 rounded-3xl bg-surface p-4">
+            <View className="mb-2 flex-row justify-between">
+              <Text className="text-[14px] text-gray-500">
+                {items.length} {items.length === 1 ? "item" : "items"}
+              </Text>
+              <Text className="text-[14px] font-semibold text-ink">
+                ৳{total}
+              </Text>
+            </View>
+            <View className="flex-row justify-between border-t border-gray-200 pt-3">
+              <Text className="text-base font-extrabold text-ink">Total</Text>
+              <Text className="text-lg font-extrabold text-brand">
+                ৳{total}
+              </Text>
+            </View>
+          </View>
+        </ScrollView>
+
+        <View className="px-4 pb-3 pt-2">
+          {!online && (
+            <View className="mb-2 flex-row items-center justify-center gap-2 rounded-xl bg-gray-900 px-3 py-2.5">
+              <Ionicons name="cloud-offline-outline" size={16} color="white" />
+              <Text className="text-[12px] font-semibold text-white">
+                Connect to the internet to place your order
+              </Text>
+            </View>
+          )}
+          <TouchableOpacity
+            className={`items-center rounded-2xl py-4 ${online ? "bg-brand active:opacity-90" : "bg-gray-300"} disabled:opacity-60`}
+            onPress={handleSubmit}
+            disabled={loading || !online}
+          >
+            {loading ? (
+              <ActivityIndicator color="white" />
+            ) : (
+              <Text className="text-[15px] font-bold text-white">
+                Place order · ৳{total}
+              </Text>
+            )}
+          </TouchableOpacity>
+        </View>
+      </KeyboardAvoidingView>
     </SafeAreaView>
   );
 }

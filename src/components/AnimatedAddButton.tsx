@@ -33,7 +33,7 @@ export function AnimatedAddButton({
     <Animated.View style={animatedStyle}>
       <TouchableOpacity
         disabled={disabled}
-        className={`h-9 w-9 items-center justify-center rounded-full ${disabled ? "bg-gray-200" : "bg-ink active:opacity-80"}`}
+        className={`h-9 w-9 items-center justify-center rounded-full ${disabled ? "bg-gray-200" : "bg-brand active:opacity-80"}`}
         onPress={handlePress}
       >
         <Ionicons name="add" size={20} color="white" />

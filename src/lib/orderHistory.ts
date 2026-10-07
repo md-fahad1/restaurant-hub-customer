@@ -1,5 +1,14 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 
+export interface OrderHistoryItem {
+  menuItemId: string;
+  name: string;
+  price: number;
+  quantity: number;
+  image?: string | null;
+  note?: string;
+}
+
 export interface OrderHistoryEntry {
   orderNumber: string;
   guestPhone: string;
@@ -7,6 +16,12 @@ export interface OrderHistoryEntry {
   restaurantName: string;
   total: number;
   placedAt: string;
+  // Nicher gulo optional. Purono order e thakbe na
+  items?: OrderHistoryItem[];
+  currency?: string;
+  orderType?: "DINE_IN" | "TAKEAWAY" | "DELIVERY";
+  tableNumber?: string | number | null;
+  deliveryAddress?: string;
 }
 
 const HISTORY_KEY = "restaurant-hub-order-history";
@@ -14,7 +29,7 @@ const GUEST_INFO_KEY = "restaurant-hub-guest-info";
 
 export async function addOrderToHistory(entry: OrderHistoryEntry) {
   const existing = await getOrderHistory();
-  const updated = [entry, ...existing].slice(0, 20); // সর্বশেষ ২০টা রাখি
+  const updated = [entry, ...existing].slice(0, 20); // sorboshesh 20 ta rakhi
   await AsyncStorage.setItem(HISTORY_KEY, JSON.stringify(updated));
 }
 

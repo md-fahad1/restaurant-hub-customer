@@ -19,7 +19,9 @@
       },
       "predictiveBackGestureEnabled": false,
       "package": "com.mdfahad11.restauranthubcustomer",
-      "permissions": ["NOTIFICATIONS"]
+      "permissions": [
+        "NOTIFICATIONS"
+      ]
     },
     "web": {
       "output": "static",
@@ -34,7 +36,8 @@
           "image": "./assets/images/splash-icon.png",
           "imageWidth": 76
         }
-      ]
+      ],
+      "expo-sharing"
     ],
     "experiments": {
       "typedRoutes": true,

@@ -57,6 +57,9 @@ export default function RootLayout() {
               headerShown: true,
               headerShadowVisible: false,
               headerTintColor: "#1a1a1a",
+              headerTitleStyle: { fontWeight: "700" },
+              headerBackButtonDisplayMode: "minimal",
+              contentStyle: { backgroundColor: "#ffffff" },
             }}
           />
         </CartProvider>

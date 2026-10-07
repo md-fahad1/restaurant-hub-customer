@@ -1,12 +1,22 @@
 import { Ionicons } from "@expo/vector-icons";
+import { Image } from "expo-image";
 import { Stack, useRouter } from "expo-router";
 import { useState } from "react";
-import { Text, TextInput, TouchableOpacity, View } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import {
+  KeyboardAvoidingView,
+  StyleSheet,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  View
+} from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { useCart } from "../context/CartContext";
+const HERO_IMAGE = require("../../assets/images/hero.jpg");
 
 export default function Landing() {
   const router = useRouter();
+  const insets = useSafeAreaInsets();
   const { setRestaurant } = useCart();
   const [manualCode, setManualCode] = useState("");
 
@@ -18,32 +28,83 @@ export default function Landing() {
   }
 
   return (
-    <SafeAreaView className="flex-1 bg-cream" edges={["bottom"]}>
-      <Stack.Screen options={{ headerShown: false }} />
+    <KeyboardAvoidingView className="flex-1 bg-ink" behavior="padding">
+      <Stack.Screen options={{ headerShown: false, statusBarStyle: "light" }} />
 
-      <View className="flex-1 items-center justify-center px-6">
-        <View className="mb-8 h-20 w-20 items-center justify-center rounded-3xl bg-brand">
-          <Ionicons name="restaurant" size={36} color="white" />
+      {/* Hero */}
+      <View className="flex-1 justify-end overflow-hidden px-6 pb-10">
+        {HERO_IMAGE ? (
+          <Image
+            source={HERO_IMAGE}
+            style={StyleSheet.absoluteFill}
+            contentFit="cover"
+          />
+        ) : (
+          <>
+            <View className="absolute -right-16 -top-10 h-64 w-64 rounded-full bg-brand/30" />
+            <View className="absolute -left-20 top-40 h-56 w-56 rounded-full bg-brand/15" />
+          </>
+        )}
+        <View className="absolute inset-0 bg-black/45" />
+
+        <View style={{ paddingTop: insets.top }} className="flex-1 justify-end">
+          <View className="mb-5 h-14 w-14 items-center justify-center rounded-2xl bg-brand">
+            <Ionicons name="restaurant" size={26} color="white" />
+          </View>
+          <Text className="text-4xl font-extrabold leading-[44px] text-white">
+            Good Food,{"\n"}Good Mood
+          </Text>
+          <Text className="mt-3 text-[15px] leading-6 text-white/80">
+            Fresh, tasty & delivered to your door — or served right at your
+            table.
+          </Text>
         </View>
+      </View>
 
-        <Text className="mb-2 text-center text-3xl font-extrabold text-ink">
-          Welcome!
-        </Text>
-        <Text className="mb-10 text-center text-[15px] text-gray-500">
-          Scan the restaurant's QR code to start ordering
-        </Text>
-
+      {/* Bottom sheet */}
+      <View
+        className="rounded-t-[32px] bg-white px-6 pt-6"
+        style={{ paddingBottom: Math.max(insets.bottom, 16) + 8 }}
+      >
         <TouchableOpacity
-          className="mb-6 w-full flex-row items-center justify-center gap-2 rounded-2xl bg-ink py-4 active:opacity-80"
+          className="flex-row items-center justify-center gap-2.5 rounded-2xl bg-brand py-4 active:opacity-90"
           onPress={() => router.push("/scan")}
         >
           <Ionicons name="qr-code-outline" size={20} color="white" />
-          <Text className="text-base font-semibold text-white">
-            Scan QR code
+          <Text className="text-base font-bold text-white">
+            Scan QR to order
           </Text>
         </TouchableOpacity>
+
+        <View className="my-4 flex-row items-center gap-3">
+          <View className="h-px flex-1 bg-gray-100" />
+          <Text className="text-xs text-gray-400">
+            or enter restaurant code
+          </Text>
+          <View className="h-px flex-1 bg-gray-100" />
+        </View>
+
+        <View className="flex-row gap-2">
+          <TextInput
+            className="flex-1 rounded-2xl bg-surface px-4 py-3.5 text-[15px] text-ink"
+            placeholder="e.g. test-restaurant"
+            placeholderTextColor="#9ca3af"
+            autoCapitalize="none"
+            value={manualCode}
+            onChangeText={setManualCode}
+            onSubmitEditing={handleManualEntry}
+            returnKeyType="go"
+          />
+          <TouchableOpacity
+            className="items-center justify-center rounded-2xl bg-ink px-5 active:opacity-80"
+            onPress={handleManualEntry}
+          >
+            <Ionicons name="arrow-forward" size={20} color="white" />
+          </TouchableOpacity>
+        </View>
+
         <TouchableOpacity
-          className="mb-3 flex-row items-center justify-center gap-2 py-2"
+          className="mt-4 flex-row items-center justify-center gap-2 py-2"
           onPress={() => router.push("/orders" as any)}
         >
           <Ionicons name="receipt-outline" size={16} color="#6b7280" />
@@ -51,27 +112,7 @@ export default function Landing() {
             View my past orders
           </Text>
         </TouchableOpacity>
-
-        <Text className="mb-3 text-[13px] text-gray-400">
-          or enter the restaurant code manually
-        </Text>
-        <View className="w-full flex-row gap-2">
-          <TextInput
-            className="flex-1 rounded-xl border border-gray-200 bg-white px-4 py-3 text-[15px]"
-            placeholder="e.g. test-restaurant"
-            placeholderTextColor="#9ca3af"
-            autoCapitalize="none"
-            value={manualCode}
-            onChangeText={setManualCode}
-          />
-          <TouchableOpacity
-            className="items-center justify-center rounded-xl bg-brand px-5"
-            onPress={handleManualEntry}
-          >
-            <Ionicons name="arrow-forward" size={20} color="white" />
-          </TouchableOpacity>
-        </View>
       </View>
-    </SafeAreaView>
+    </KeyboardAvoidingView>
   );
 }
