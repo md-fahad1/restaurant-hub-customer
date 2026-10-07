@@ -8,6 +8,8 @@ on:
 jobs:
   update:
     runs-on: ubuntu-latest
+    env:
+      EXPO_TOKEN: ${{ secrets.EXPO_TOKEN }}
     steps:
       - uses: actions/checkout@v4
 
@@ -16,12 +18,7 @@ jobs:
           node-version: 20
           cache: npm
 
-      - uses: expo/expo-github-action@v8
-        with:
-          eas-version: latest
-          token: ${{ secrets.EXPO_TOKEN }}
-
       - run: npm ci
 
       - name: Publish OTA update
-        run: eas update --channel preview --message "${{ github.event.head_commit.message }}" --non-interactive
+        run: npx --yes eas-cli@latest update --channel preview --message "${{ github.event.head_commit.message }}" --non-interactive
