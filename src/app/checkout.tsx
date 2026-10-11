@@ -86,6 +86,14 @@ export default function Checkout() {
       return;
     }
 
+    if (orderType === "DINE_IN" && !tableId) {
+      Alert.alert(
+        "Table QR needed",
+        "For dine-in, please scan the QR code on your table. Or choose Takeaway or Delivery.",
+      );
+      return;
+    }
+
     const name = guestName.trim();
     const phone = normalizePhone(guestPhone);
 
@@ -199,7 +207,7 @@ export default function Checkout() {
                 ORDER TYPE
               </Text>
               <View className="mb-5 flex-row gap-1.5 rounded-2xl bg-surface p-1.5">
-                {ORDER_TYPES.filter((o) => o.type !== "DINE_IN").map((o) => {
+                {ORDER_TYPES.map((o) => {
                   const active = o.type === orderType;
                   return (
                     <TouchableOpacity

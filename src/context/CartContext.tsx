@@ -1,3 +1,4 @@
+import { round2 } from "@/lib/money";
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import {
   createContext,
@@ -150,7 +151,7 @@ export function CartProvider({ children }: { children: ReactNode }) {
     setOrderType("TAKEAWAY");
   }
 
-  const total = items.reduce((sum, l) => sum + l.price * l.quantity, 0);
+  const total = round2(items.reduce((sum, l) => sum + l.price * l.quantity, 0));
   const itemCount = items.reduce((sum, l) => sum + l.quantity, 0);
 
   return (

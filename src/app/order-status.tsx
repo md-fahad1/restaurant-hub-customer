@@ -1,7 +1,7 @@
 import { useQuery } from "@apollo/client/react";
 import { Ionicons } from "@expo/vector-icons";
 import Constants from "expo-constants";
-import { Stack, useLocalSearchParams } from "expo-router";
+import { Stack, useLocalSearchParams, useRouter } from "expo-router";
 import { useEffect, useRef, useState } from "react";
 import {
   ActivityIndicator,
@@ -43,6 +43,9 @@ const STATUS_LABELS: Record<string, string> = {
   PICKED_UP: "Your order has been picked up.",
   OUT_FOR_DELIVERY: "Your order is on the way!",
   DELIVERED: "Your order has been delivered!",
+  SERVED: "Your food has been served. Enjoy!",
+  CANCELLED: "This order was cancelled.",
+  FAILED: "We could not deliver this order.",
 };
 
 const HEADLINES: Record<string, string> = {
@@ -55,6 +58,9 @@ const HEADLINES: Record<string, string> = {
   PICKED_UP: "Order picked up",
   OUT_FOR_DELIVERY: "On the way",
   DELIVERED: "Delivered",
+  SERVED: "Served",
+  CANCELLED: "Order cancelled",
+  FAILED: "Delivery failed",
 };
 
 type Step = {
@@ -88,6 +94,12 @@ const KITCHEN_STEPS: Step[] = [
     label: "Ready",
     hint: "Ready for you",
     icon: "fast-food-outline",
+  },
+  {
+    key: "SERVED",
+    label: "Served",
+    hint: "Brought to your table",
+    icon: "restaurant-outline",
   },
   {
     key: "COMPLETED",
@@ -217,6 +229,7 @@ function StepTimeline({
 }
 
 export default function OrderStatus() {
+  const router = useRouter();
   const { orderNumber, guestPhone, restaurantSlug } = useLocalSearchParams<{
     orderNumber: string;
     guestPhone: string;
@@ -235,14 +248,13 @@ export default function OrderStatus() {
     );
   }, [orderNumber]);
 
-  const { data, loading, error } = useQuery<TrackGuestOrderData>(
-    TRACK_ORDER_QUERY,
-    {
+  const lastData = useRef<TrackGuestOrderData | undefined>(undefined);
+  const { data, loading, error, stopPolling, refetch } =
+    useQuery<TrackGuestOrderData>(TRACK_ORDER_QUERY, {
       variables: { restaurantSlug, orderNumber, guestPhone },
       pollInterval: 5000,
       skip: !restaurantSlug || !orderNumber || !guestPhone,
-    },
-  );
+    });
 
   useEffect(() => {
     if (!Notifications) return;
@@ -255,7 +267,12 @@ export default function OrderStatus() {
     const order = data?.trackGuestOrder;
     if (!order) return;
 
-    const currentStatus = order.delivery ? order.delivery.status : order.status;
+    const currentStatus =
+      order.status === "CANCELLED"
+        ? "CANCELLED"
+        : order.delivery
+          ? order.delivery.status
+          : order.status;
 
     if (
       previousStatusRef.current &&
@@ -274,7 +291,23 @@ export default function OrderStatus() {
     previousStatusRef.current = currentStatus;
   }, [data]);
 
-  if (loading && !data) {
+  // Order shesh hole server ke ar jiggesh kora lagbe na (battery, data, server er chap kome)
+  useEffect(() => {
+    const o = data?.trackGuestOrder;
+    if (!o) return;
+    const finished =
+      o.status === "CANCELLED" ||
+      (o.delivery
+        ? ["DELIVERED", "FAILED", "CANCELLED"].includes(o.delivery.status)
+        : o.status === "COMPLETED");
+    if (finished) stopPolling();
+  }, [data, stopPolling]);
+
+  // Poll fail holeo ager thik data dekhabo
+  if (data) lastData.current = data;
+  const shown = data ?? lastData.current;
+
+  if (loading && !shown) {
     return (
       <View className="flex-1 items-center justify-center bg-white">
         <Stack.Screen options={{ title: "Track Order" }} />
@@ -283,22 +316,78 @@ export default function OrderStatus() {
     );
   }
 
-  if (error || !data) {
+  if (!shown) {
     return (
       <View className="flex-1 items-center justify-center gap-2 bg-white p-6">
         <Stack.Screen options={{ title: "Track Order" }} />
         <Ionicons name="alert-circle-outline" size={40} color="#ef4444" />
         <Text className="text-center text-gray-600">
-          Could not find this order.
+          {error && !/not found/i.test(error.message)
+            ? "Couldn't load your order. Check your internet and try again."
+            : "Could not find this order."}
         </Text>
+        <TouchableOpacity
+          onPress={() => refetch()}
+          className="mt-3 rounded-2xl bg-brand px-6 py-3"
+        >
+          <Text className="font-bold text-white">Try again</Text>
+        </TouchableOpacity>
       </View>
     );
   }
 
-  const order = data.trackGuestOrder;
+  const order = shown.trackGuestOrder;
+
+  // Cancelled ba failed order jeno cholchhe order er moto na dekhay
+  const deliveryStatus = order.delivery?.status ?? null;
+  const cancelled =
+    order.status === "CANCELLED" || deliveryStatus === "CANCELLED";
+  const failed = !cancelled && deliveryStatus === "FAILED";
+  if (cancelled || failed) {
+    return (
+      <SafeAreaView className="flex-1 bg-white" edges={["bottom"]}>
+        <Stack.Screen options={{ title: "Track Order" }} />
+        <View className="flex-1 items-center justify-center p-6">
+          <View className="mb-4 h-24 w-24 items-center justify-center rounded-full bg-red-50">
+            <Ionicons
+              name={failed ? "warning-outline" : "close-circle-outline"}
+              size={48}
+              color="#ef4444"
+            />
+          </View>
+          <Text className="text-2xl font-extrabold text-ink">
+            {failed ? "Delivery failed" : "Order cancelled"}
+          </Text>
+          <Text className="mt-1 text-[13px] text-gray-400">
+            #{order.orderNumber}
+          </Text>
+          <Text className="mt-3 text-center text-[14px] leading-5 text-gray-500">
+            {failed
+              ? "We could not deliver this order."
+              : "This order was cancelled and will not be prepared."}{" "}
+            Please contact the restaurant if you have any questions.
+          </Text>
+          <TouchableOpacity
+            className="mt-6 rounded-2xl bg-brand px-8 py-3.5"
+            onPress={() => router.replace("/menu")}
+          >
+            <Text className="font-bold text-white">Back to menu</Text>
+          </TouchableOpacity>
+        </View>
+      </SafeAreaView>
+    );
+  }
   const isDelivery = order.type === "DELIVERY" && !!order.delivery;
-  const steps = isDelivery ? DELIVERY_STEPS : KITCHEN_STEPS;
-  const currentKey = isDelivery ? order.delivery!.status : order.status;
+  const steps = isDelivery
+    ? DELIVERY_STEPS
+    : order.type === "DINE_IN"
+      ? KITCHEN_STEPS
+      : KITCHEN_STEPS.filter((s) => s.key !== "SERVED");
+  const currentKey = isDelivery
+    ? order.delivery!.status
+    : order.status === "SERVED" && order.type !== "DINE_IN"
+      ? "READY"
+      : order.status;
   const currentIndex = Math.max(
     0,
     steps.findIndex((s) => s.key === currentKey),

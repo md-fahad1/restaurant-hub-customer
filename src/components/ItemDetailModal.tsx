@@ -1,3 +1,4 @@
+import { round2 } from "@/lib/money";
 import { Ionicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
 import { useEffect, useState } from "react";
@@ -145,7 +146,7 @@ export function ItemDetailModal({ item, currency, onClose, onAdd }: Props) {
                 <Text className="text-[15px] font-bold text-white">
                   {outOfStock
                     ? "Unavailable"
-                    : `Add · ${currency} ${item.price * quantity}`}
+                    : `Add · ${currency} ${round2(item.price * quantity)}`}
                 </Text>
               </TouchableOpacity>
             </View>

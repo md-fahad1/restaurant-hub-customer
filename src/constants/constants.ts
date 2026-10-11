@@ -1,2 +1,1 @@
-export const GRAPHQL_ENDPOINT =
-  "https://restauranthub-jggu.onrender.com/graphql";
+export const GRAPHQL_ENDPOINT = "https://restauranthub-1.onrender.com/graphql";
