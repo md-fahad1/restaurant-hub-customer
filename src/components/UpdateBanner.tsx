@@ -1,122 +1,133 @@
+import { Ionicons } from "@expo/vector-icons";
 import * as Updates from "expo-updates";
-import { useEffect, useState } from "react";
-import {
-    ActivityIndicator,
-    Alert,
-    Linking,
-    Text,
-    TouchableOpacity,
-    View,
-} from "react-native";
+import { useCallback, useEffect, useRef, useState } from "react";
+import { Alert, AppState, Linking, Pressable, Text, View } from "react-native";
+import { useSafeAreaInsets } from "react-native-safe-area-context";
 import { APP_VERSION, isNewerVersion, LATEST_VERSION_URL } from "../config";
 
-type Banner =
-  | { kind: "ota" } // JS-only update (eas update) — app er bhitorei install hoy
-  | { kind: "apk"; version: string; downloadUrl: string }; // notun APK lagbe
+const CHECK_EVERY_MS = 30 * 60 * 1000; // app khola thakle
+const MIN_GAP_MS = 60 * 1000; // minute e ekbar er beshi check korbe na
 
-// Ek session e ekbar-i check kori, jeno screen bodlale bar bar network call na hoy
-let checkPromise: Promise<Banner | null> | null = null;
-let dismissedThisSession = false;
+/**
+ * Duto update:
+ * 1. OTA (JS code): nijei khuje pay, "Update" chaple download kore app restart hoy. Cart phone e save thake, hariye jay na.
+ * 2. Notun APK (native code bodlale): latest-version.json theke jane, "Download" e APK link khole.
+ * Dev / Expo Go te kichu kore na (Updates.isEnabled false).
+ */
+export function UpdateBanner() {
+  const insets = useSafeAreaInsets();
+  const { isUpdateAvailable, isUpdatePending } = Updates.useUpdates();
+  const [busy, setBusy] = useState(false);
+  const [dismissed, setDismissed] = useState(false);
+  const [apk, setApk] = useState<{
+    version: string;
+    downloadUrl: string;
+  } | null>(null);
+  const lastCheck = useRef(0);
 
-function checkForUpdate(): Promise<Banner | null> {
-  if (!checkPromise) {
-    checkPromise = (async () => {
-      // 1) OTA update ache kina (shudhu release build e kaj kore)
-      if (Updates.isEnabled) {
-        try {
-          const res = await Updates.checkForUpdateAsync();
-          if (res.isAvailable) return { kind: "ota" } as Banner;
-        } catch {
-          // check fail hole chup chap APK check e jai
-        }
-      }
-
-      // 2) Notun APK version ache kina (native change hole)
+  const check = useCallback(async () => {
+    if (Date.now() - lastCheck.current < MIN_GAP_MS) return;
+    lastCheck.current = Date.now();
+    if (Updates.isEnabled) {
       try {
-        const res = await fetch(LATEST_VERSION_URL);
-        const data = await res.json();
-        if (data.version && isNewerVersion(data.version, APP_VERSION)) {
-          return {
-            kind: "apk",
-            version: data.version,
-            downloadUrl: data.downloadUrl,
-          } as Banner;
+        await Updates.checkForUpdateAsync();
+      } catch {
+        /* offline: pore abar dekhbe */
+      }
+    }
+    if (LATEST_VERSION_URL) {
+      try {
+        const res = await fetch(`${LATEST_VERSION_URL}?t=${Date.now()}`);
+        const j = (await res.json()) as {
+          version?: string;
+          downloadUrl?: string;
+        };
+        if (
+          j.version &&
+          j.downloadUrl &&
+          isNewerVersion(j.version, APP_VERSION)
+        ) {
+          setApk({ version: j.version, downloadUrl: j.downloadUrl });
         }
       } catch {
-        // ইন্টারনেট না থাকলে চুপচাপ ইগনোর
+        /* offline ba file nai: ignore */
       }
-      return null;
-    })();
-  }
-  return checkPromise;
-}
-
-export function UpdateBanner() {
-  const [banner, setBanner] = useState<Banner | null>(null);
-  const [busy, setBusy] = useState(false);
-  const [dismissed, setDismissed] = useState(dismissedThisSession);
-
-  useEffect(() => {
-    let cancelled = false;
-    checkForUpdate().then((b) => {
-      if (!cancelled) setBanner(b);
-    });
-    return () => {
-      cancelled = true;
-    };
+    }
   }, []);
 
-  async function applyOtaUpdate() {
+  useEffect(() => {
+    void check();
+    const id = setInterval(() => void check(), CHECK_EVERY_MS);
+    const sub = AppState.addEventListener("change", (s) => {
+      if (s === "active") void check();
+    });
+    return () => {
+      clearInterval(id);
+      sub.remove();
+    };
+  }, [check]);
+
+  async function applyOta() {
     setBusy(true);
     try {
-      await Updates.fetchUpdateAsync(); // download
-      await Updates.reloadAsync(); // app restart hoye notun code load hobe
-    } catch {
+      if (!isUpdatePending) await Updates.fetchUpdateAsync();
+      await Updates.reloadAsync();
+    } catch (e) {
       setBusy(false);
       Alert.alert(
         "Update failed",
-        "Please check your internet connection and try again.",
+        `${e instanceof Error ? e.message : String(e)}\nCheck the internet and try again.`,
       );
     }
   }
 
-  if (!banner || dismissed) return null;
+  if (dismissed) return null;
+  const showApk = !!apk;
+  const showOta = !showApk && (isUpdateAvailable || isUpdatePending);
+  if (!showApk && !showOta) return null;
 
   return (
-    <View className="flex-row items-center justify-between bg-brand px-4 py-2.5">
-      <Text className="flex-1 text-[13px] font-medium text-white">
-        {banner.kind === "ota"
-          ? "A new update is available"
-          : `A new version (${banner.version}) is available`}
-      </Text>
-
-      {!busy && (
-        <TouchableOpacity
-          onPress={() => {
-            dismissedThisSession = true;
-            setDismissed(true);
-          }}
-          className="mr-4"
-        >
-          <Text className="text-[13px] text-white/80">Later</Text>
-        </TouchableOpacity>
-      )}
-
-      {busy ? (
-        <ActivityIndicator color="white" />
-      ) : (
-        <TouchableOpacity
-          onPress={() =>
-            banner.kind === "ota"
-              ? applyOtaUpdate()
-              : Linking.openURL(banner.downloadUrl)
-          }
-        >
-          <Text className="text-[13px] font-bold text-white underline">
-            Update
-          </Text>
-        </TouchableOpacity>
-      )}
+    <View
+      style={{ top: insets.top + 6 }}
+      className="absolute left-3 right-3 z-50 flex-row items-center rounded-2xl border border-blue-200 bg-white p-3 shadow-xl"
+    >
+      <View className="mr-3 h-10 w-10 items-center justify-center rounded-xl bg-blue-100">
+        <Ionicons
+          name={showApk ? "cloud-download" : "sparkles"}
+          size={20}
+          color="#2563eb"
+        />
+      </View>
+      <View className="flex-1 pr-2">
+        <Text className="font-bold text-ink">
+          {showApk
+            ? `New version ${apk!.version} available`
+            : "Update available"}
+        </Text>
+        <Text className="text-xs text-gray-500">
+          {showApk
+            ? "Download and install the new app"
+            : "Tap Update to get the latest improvements"}
+        </Text>
+      </View>
+      <Pressable
+        disabled={busy}
+        onPress={() =>
+          showApk ? void Linking.openURL(apk!.downloadUrl) : void applyOta()
+        }
+        className={`rounded-xl bg-blue-600 px-4 py-2.5 ${busy ? "opacity-50" : ""}`}
+      >
+        <Text className="font-bold text-white">
+          {busy ? "Updating..." : showApk ? "Download" : "Update"}
+        </Text>
+      </Pressable>
+      <Pressable
+        onPress={() => setDismissed(true)}
+        hitSlop={10}
+        className="ml-2 p-1"
+      >
+        <Ionicons name="close" size={20} color="#9ca3af" />
+      </Pressable>
     </View>
   );
 }

@@ -1,7 +1,6 @@
 import { ErrorState } from "@/components/ErrorState";
 import { OfflineBanner } from "@/components/OfflineBanner";
 import { ServerWakingNotice } from "@/components/ServerWakingNotice";
-import { UpdateBanner } from "@/components/UpdateBanner";
 import { Ionicons } from "@expo/vector-icons";
 import { Image } from "expo-image";
 import { Stack, useRouter } from "expo-router";
@@ -281,7 +280,6 @@ export default function Menu() {
       <Stack.Screen options={{ headerShown: false }} />
 
       <KeyboardAvoidingView className="flex-1" behavior="padding">
-        <UpdateBanner />
         <OfflineBanner
           online={online}
           stale={isStale}

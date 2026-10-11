@@ -3,6 +3,7 @@ import { Stack } from "expo-router";
 import { StatusBar } from "expo-status-bar";
 import "react-native-reanimated";
 import { SafeAreaProvider } from "react-native-safe-area-context";
+import { UpdateBanner } from "../components/UpdateBanner";
 import { CartProvider } from "../context/CartContext";
 import "../global.css";
 import { client } from "../lib/apollo";
@@ -23,6 +24,7 @@ export default function RootLayout() {
               contentStyle: { backgroundColor: "#ffffff" },
             }}
           />
+          <UpdateBanner />
         </CartProvider>
       </ApolloProvider>
     </SafeAreaProvider>

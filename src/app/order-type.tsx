@@ -14,7 +14,7 @@ export default function OrderType() {
   const router = useRouter();
   // menu theke "change" korte ashle ?change=1 thake
   const { change } = useLocalSearchParams<{ change?: string }>();
-  const { restaurantSlug, orderType, setOrderType } = useCart();
+  const { restaurantSlug, tableId, orderType, setOrderType } = useCart();
   const [selected, setSelected] = useState(orderType);
 
   const { data, loading, error, refetch } = usePublicMenu(restaurantSlug, null);
@@ -96,43 +96,45 @@ export default function OrderType() {
         </Text>
 
         <View className="gap-3">
-          {ORDER_TYPES.map((o) => {
-            const active = selected === o.type;
-            return (
-              <TouchableOpacity
-                key={o.type}
-                activeOpacity={0.9}
-                onPress={() => setSelected(o.type)}
-                className={`flex-row items-center gap-4 rounded-3xl border-2 bg-white p-4 ${active ? "border-brand" : "border-transparent"}`}
-                style={cardShadow}
-              >
-                <View
-                  className={`h-12 w-12 items-center justify-center rounded-2xl ${active ? "bg-brand" : "bg-cream"}`}
+          {ORDER_TYPES.filter((o) => o.type !== "DINE_IN" || !!tableId).map(
+            (o) => {
+              const active = selected === o.type;
+              return (
+                <TouchableOpacity
+                  key={o.type}
+                  activeOpacity={0.9}
+                  onPress={() => setSelected(o.type)}
+                  className={`flex-row items-center gap-4 rounded-3xl border-2 bg-white p-4 ${active ? "border-brand" : "border-transparent"}`}
+                  style={cardShadow}
                 >
-                  <Ionicons
-                    name={o.icon}
-                    size={22}
-                    color={active ? "white" : "#ea580c"}
-                  />
-                </View>
-                <View className="flex-1">
-                  <Text className="text-[16px] font-bold text-ink">
-                    {o.title}
-                  </Text>
-                  <Text className="text-[13px] text-gray-500">
-                    {o.subtitle}
-                  </Text>
-                </View>
-                <View
-                  className={`h-6 w-6 items-center justify-center rounded-full border-2 ${active ? "border-brand bg-brand" : "border-gray-300"}`}
-                >
-                  {active && (
-                    <Ionicons name="checkmark" size={14} color="white" />
-                  )}
-                </View>
-              </TouchableOpacity>
-            );
-          })}
+                  <View
+                    className={`h-12 w-12 items-center justify-center rounded-2xl ${active ? "bg-brand" : "bg-cream"}`}
+                  >
+                    <Ionicons
+                      name={o.icon}
+                      size={22}
+                      color={active ? "white" : "#ea580c"}
+                    />
+                  </View>
+                  <View className="flex-1">
+                    <Text className="text-[16px] font-bold text-ink">
+                      {o.title}
+                    </Text>
+                    <Text className="text-[13px] text-gray-500">
+                      {o.subtitle}
+                    </Text>
+                  </View>
+                  <View
+                    className={`h-6 w-6 items-center justify-center rounded-full border-2 ${active ? "border-brand bg-brand" : "border-gray-300"}`}
+                  >
+                    {active && (
+                      <Ionicons name="checkmark" size={14} color="white" />
+                    )}
+                  </View>
+                </TouchableOpacity>
+              );
+            },
+          )}
         </View>
 
         {selected === "DELIVERY" && (

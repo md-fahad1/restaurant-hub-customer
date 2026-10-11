@@ -199,7 +199,7 @@ export default function Checkout() {
                 ORDER TYPE
               </Text>
               <View className="mb-5 flex-row gap-1.5 rounded-2xl bg-surface p-1.5">
-                {ORDER_TYPES.map((o) => {
+                {ORDER_TYPES.filter((o) => o.type !== "DINE_IN").map((o) => {
                   const active = o.type === orderType;
                   return (
                     <TouchableOpacity
